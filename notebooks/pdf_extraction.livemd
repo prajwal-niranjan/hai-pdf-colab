@@ -1,0 +1,43 @@
+# 01_pdf_extraction.livemd
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.13"},
+  {:jason, "~> 1.4"}
+])
+
+
+
+```
+
+## Load PDF File
+
+```elixir
+data_dir = Path.expand("./data/sample_pdfs")
+out_dir = Path.expand("./outputs")
+File.mkdir_p!(out_dir)
+
+# Helper: run shell tools (requires poppler-utils, tesseract, ocrmypdf installed locally)
+pdf = Kino.Input.text("PDF path (relative to repo)", default: "data/sample_pdfs/invoicesample.pdf")
+pdf_path = Kino.Input.read(pdf)
+
+# 1) OCR if needed (very rough heuristic via pdftotext char count)
+{"", 0} =
+  System.cmd("bash", ["-lc", """
+    set -e
+    tmp_txt=$(mktemp)
+    pdftotext "#{pdf_path}" "$tmp_txt" || true
+    count=$(wc -m < "$tmp_txt" | tr -d ' ')
+    if [ "$count" -lt 200 ]; then
+      ocrmypdf --force-ocr --skip-text "#{pdf_path}" "#{pdf_path}.ocr.pdf"
+      echo "#{pdf_path}.ocr.pdf"
+    else
+      echo "#{pdf_path}"
+    fi
+  """], into: IO.stream())
+
+ocr_pdf =
+  IO.read(:stdio, :line)
+  |> String.trim()
+
+```
