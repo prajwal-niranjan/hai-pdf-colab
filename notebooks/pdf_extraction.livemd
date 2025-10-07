@@ -1,0 +1,123 @@
+# 01_pdf_extraction.livemd
+
+```elixir
+
+
+Mix.install([
+  {:pdf, "~> 0.7.2"},
+  {:tablex, "~> 0.3.1"},
+  {:nx, "~> 0.5"},
+  {:jason, "~> 1.4"}
+])
+
+
+```
+
+## Text (via `pdftotext`)
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/invoicesample.pdf")
+
+{:ok, pdf} = PDF.from_file(pdf_path)
+
+pdf.pages
+|> Enum.each(fn page ->
+  IO.puts("Page #{page.number}:")
+  IO.puts(page.text)
+end)
+
+```
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/invoicesample.pdf")
+
+{output, 0} = System.cmd("pdftotext", ["-layout", pdf_path, "-"])
+IO.puts(output)
+
+```
+
+## Tables (parsed with `Tablex`)
+
+```elixir
+rows =
+  output
+  |> String.split("\n", trim: true)
+  |> Enum.map(&String.split(&1, ~r/\s{2,}/, trim: true))
+
+IO.inspect(rows, label: "Extracted rows")
+
+```
+
+## Images (via `pdfimages`)
+
+```elixir
+System.cmd("pdfimages", ["-png", pdf_path, "outputs/invoice_img"])
+
+```
+
+```elixir
+ocr_path = "outputs/ocr_invoice.pdf"
+{log, status} = System.cmd("ocrmypdf", [pdf_path, ocr_path])
+IO.puts("OCR log: #{log}")
+
+
+```
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/invoicesample.pdf")
+output_path = Path.expand("outputs/ocr_invoice.pdf")
+
+{result, status} = System.cmd("ocrmypdf", [pdf_path, output_path])
+IO.puts(result)
+IO.inspect(status)
+
+```
+
+```elixir
+File.exists?("outputs/ocr_invoice.pdf")
+
+
+```
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/invoicesample.pdf")
+output_path = Path.expand("outputs/ocr_invoice.pdf")
+
+{result, status} = System.cmd("ocrmypdf", [pdf_path, output_path], stderr_to_stdout: true)
+IO.puts(result)
+IO.inspect(status)
+
+```
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/scanned_article.pdf")
+output_path = Path.expand("outputs/ocr_scanned.pdf")
+
+{result, status} = System.cmd("ocrmypdf", ["--force-ocr", pdf_path, output_path], stderr_to_stdout: true)
+IO.puts(result)
+IO.inspect(status)
+
+```
+
+```elixir
+ocr_path = Path.expand("outputs/ocr_scanned.pdf")
+
+{text_output, 0} = System.cmd("pdftotext", ["-layout", ocr_path, "-"])
+
+rows = []  
+
+images =
+  File.ls!("outputs")
+  |> Enum.filter(&String.contains?(&1, "scanned_article_img"))
+
+results = %{
+  text: text_output,
+  tables: rows,
+  images: images,
+  ocr_pdf: "outputs/ocr_scanned.pdf"
+}
+
+File.write!("outputs/scanned_article.json", Jason.encode!(results, pretty: true))
+IO.puts("Saved structured results to outputs/scanned_article.json")
+
+```
