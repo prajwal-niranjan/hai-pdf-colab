@@ -1,0 +1,17 @@
+# Untitled notebook
+
+```elixir
+Mix.install([
+  {:pythonx, "~> 0.4.2"},
+  {:kino_pythonx, "~> 0.1.0"}
+])
+```
+
+## Section
+
+```elixir
+Mix.install([
+  {:pdf_reader, "~> 0.1.0"}
+])
+
+```
