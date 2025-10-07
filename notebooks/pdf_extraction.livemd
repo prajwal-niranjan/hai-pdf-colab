@@ -1,43 +1,123 @@
 # 01_pdf_extraction.livemd
 
 ```elixir
+
+
 Mix.install([
-  {:kino, "~> 0.13"},
+  {:pdf, "~> 0.7.2"},
+  {:tablex, "~> 0.3.1"},
+  {:nx, "~> 0.5"},
   {:jason, "~> 1.4"}
 ])
 
 
+```
+
+## Text (via `pdftotext`)
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/invoicesample.pdf")
+
+{:ok, pdf} = PDF.from_file(pdf_path)
+
+pdf.pages
+|> Enum.each(fn page ->
+  IO.puts("Page #{page.number}:")
+  IO.puts(page.text)
+end)
 
 ```
 
-## Load PDF File
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/invoicesample.pdf")
+
+{output, 0} = System.cmd("pdftotext", ["-layout", pdf_path, "-"])
+IO.puts(output)
+
+```
+
+## Tables (parsed with `Tablex`)
 
 ```elixir
-data_dir = Path.expand("./data/sample_pdfs")
-out_dir = Path.expand("./outputs")
-File.mkdir_p!(out_dir)
+rows =
+  output
+  |> String.split("\n", trim: true)
+  |> Enum.map(&String.split(&1, ~r/\s{2,}/, trim: true))
 
-# Helper: run shell tools (requires poppler-utils, tesseract, ocrmypdf installed locally)
-pdf = Kino.Input.text("PDF path (relative to repo)", default: "data/sample_pdfs/invoicesample.pdf")
-pdf_path = Kino.Input.read(pdf)
+IO.inspect(rows, label: "Extracted rows")
 
-# 1) OCR if needed (very rough heuristic via pdftotext char count)
-{"", 0} =
-  System.cmd("bash", ["-lc", """
-    set -e
-    tmp_txt=$(mktemp)
-    pdftotext "#{pdf_path}" "$tmp_txt" || true
-    count=$(wc -m < "$tmp_txt" | tr -d ' ')
-    if [ "$count" -lt 200 ]; then
-      ocrmypdf --force-ocr --skip-text "#{pdf_path}" "#{pdf_path}.ocr.pdf"
-      echo "#{pdf_path}.ocr.pdf"
-    else
-      echo "#{pdf_path}"
-    fi
-  """], into: IO.stream())
+```
 
-ocr_pdf =
-  IO.read(:stdio, :line)
-  |> String.trim()
+## Images (via `pdfimages`)
+
+```elixir
+System.cmd("pdfimages", ["-png", pdf_path, "outputs/invoice_img"])
+
+```
+
+```elixir
+ocr_path = "outputs/ocr_invoice.pdf"
+{log, status} = System.cmd("ocrmypdf", [pdf_path, ocr_path])
+IO.puts("OCR log: #{log}")
+
+
+```
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/invoicesample.pdf")
+output_path = Path.expand("outputs/ocr_invoice.pdf")
+
+{result, status} = System.cmd("ocrmypdf", [pdf_path, output_path])
+IO.puts(result)
+IO.inspect(status)
+
+```
+
+```elixir
+File.exists?("outputs/ocr_invoice.pdf")
+
+
+```
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/invoicesample.pdf")
+output_path = Path.expand("outputs/ocr_invoice.pdf")
+
+{result, status} = System.cmd("ocrmypdf", [pdf_path, output_path], stderr_to_stdout: true)
+IO.puts(result)
+IO.inspect(status)
+
+```
+
+```elixir
+pdf_path = Path.expand("data/sample_pdfs/scanned_article.pdf")
+output_path = Path.expand("outputs/ocr_scanned.pdf")
+
+{result, status} = System.cmd("ocrmypdf", ["--force-ocr", pdf_path, output_path], stderr_to_stdout: true)
+IO.puts(result)
+IO.inspect(status)
+
+```
+
+```elixir
+ocr_path = Path.expand("outputs/ocr_scanned.pdf")
+
+{text_output, 0} = System.cmd("pdftotext", ["-layout", ocr_path, "-"])
+
+rows = []  
+
+images =
+  File.ls!("outputs")
+  |> Enum.filter(&String.contains?(&1, "scanned_article_img"))
+
+results = %{
+  text: text_output,
+  tables: rows,
+  images: images,
+  ocr_pdf: "outputs/ocr_scanned.pdf"
+}
+
+File.write!("outputs/scanned_article.json", Jason.encode!(results, pretty: true))
+IO.puts("Saved structured results to outputs/scanned_article.json")
 
 ```
